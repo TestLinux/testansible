@@ -1,0 +1,80 @@
+- hosts: ec2-18-204-43-74.compute-1.amazonaws.com
+  vars:
+       #vars for ec2 creation
+       win_ec2_sec_group: win_ansible_sg
+       aws_region: us-west-2
+       win_ec2_instance_type: t2.large
+       win_ami_id: ami-03295ec   #win 2019 Base
+       ansible_password: Test@123 #administator pswd
+  tasks:
+#this task will create anew security group with required rules
+  - name: Setting up the Security/Firewall Group
+    ec2_group:
+          name: "{{ win_ec2_sec_group }} "
+          description: Allowing Traffic on port 22 and 80
+          region: "{{ aws_region  }} "
+          rules:
+           - proto: tcp
+             from_port: 80
+             to_port: 80
+             cidr_ip: 0.0.0.0/0
+
+ 
+
+           - proto: tcp
+             from_port: 3389
+             to_port: 3389
+             cidr_ip: 0.0.0.0/0
+
+ 
+
+           - proto: tcp
+             from_port: 5986
+             to_port: 5986
+             cidr_ip: 0.0.0.0/0
+
+ 
+
+           - proto: icmp
+             from_port: -1
+             to_port: -1
+             cidr_ip: 0.0.0.0/0
+          rules_egress:
+           - proto: all
+             cidr_ip: 0.0.0.0/0
+          #vpc_id: vpc-d8826ebd
+
+ 
+
+#this task spin a new ec2 window instance
+  - name: Provision EC2 window instance
+    ec2:
+         region: "{{ aws_region  }} "
+         instance_type: "{{ win_ec2_instance_type }}"
+         image: "{{ win_ami_id }}"
+         wait: yes
+         wait_timeout: 500
+         count: 1
+         instance_tags:
+            Name: AWS-Window-Ansible
+    Owner: Testowner
+    monitoring: yes
+    group: "{{ win_ec2_sec_group }}"
+# below userdata is very important as we enable winrm on new server, also ser the administator password
+  user_data: "{{ lookup('template', 'etc/ansible/ec2-windows/winrm-userdata.txt.j2') }}"
+  register: ec2_out
+# wait for winrm to listen on port 5986
+- name: Wait for WinRM on all hosts
+  wait_for:
+   port: 5986
+   host: "{{ item.public_ip }}"
+   timeout: 300
+   state: started
+   with_item: "{{ ec2_out.instance }}"
+
+    # display the public dns and ip address
+    # - debug:
+    # msg: "System {{ item.public_dns_name }} has public-ip {{ item.public_ip }}"
+    # with_item: "{{ ec2_out.instance }}"
+         #RUN COMMANDS
+#ansible-playbook  <.yaml (filename)>
